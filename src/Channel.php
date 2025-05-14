@@ -32,8 +32,8 @@ class Channel
     public function stats(): array
     {
         return [
-            'consumer_num' => count($this->popWaiters),
-            'producer_num' => count($this->pushWaiters),
+            'consumer_num' => $this->getPopWaitersCount(),
+            'producer_num' => $this->getPushWaitersCount(),
             'queue_num' => $this->queue->count(),
             'capacity' => $this->capacity,
             'closed' => $this->closed
@@ -62,7 +62,13 @@ class Channel
         $promise = $deferred->promise();
         
         if ($timeout > 0) {
-            $promise = timeout($promise, $timeout);
+            $promise = timeout($promise, $timeout)->then(null, function($e) use ($deferred){
+                $key = array_search($deferred, $this->pushWaiters);
+                if ($key !== false) {
+                    unset($this->pushWaiters[$key]);
+                }
+                throw $e;
+            });
         }
 
         return $promise->then(function ($result) use ($data) {
@@ -94,7 +100,13 @@ class Channel
         $promise = $deferred->promise();
         
         if ($timeout > 0) {
-            $promise = timeout($promise, $timeout);
+            $promise = timeout($promise, $timeout)->then(null, function($e) use ($deferred){
+                $key = array_search($deferred, $this->popWaiters);
+                if ($key !== false) {
+                    unset($this->popWaiters[$key]);
+                }
+                throw $e;
+            });
         }
 
         return $promise;
@@ -153,6 +165,16 @@ class Channel
             $deferred->reject(new ChannelClosedException());
         }
         $this->popWaiters = [];
+    }
+
+    public function getPushWaitersCount(): int
+    {
+        return count($this->pushWaiters);
+    }
+
+    public function getPopWaitersCount(): int
+    {
+        return count($this->popWaiters);
     }
 }
 
